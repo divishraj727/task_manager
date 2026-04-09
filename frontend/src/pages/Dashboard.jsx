@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import {
+  AlertTriangle, CheckCircle, Circle, Clock,
+  GitBranch, LayoutGrid, Star, XCircle,
+} from "lucide-react";
+import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import RadialOrbitalTimeline from "../components/ui/radial-orbital-timeline";
 import TaskCard from "../components/TaskCard";
 import TaskFilters from "../components/TaskFilters";
 import TaskModal from "../components/TaskModal";
@@ -16,11 +22,75 @@ function StatCard({ label, value, color }) {
   );
 }
 
+// Compute deadline fields from a due_date string
+function deadlineFields(dueDateStr, status) {
+  if (!dueDateStr || status === "done" || status === "cancelled") {
+    return { daysLeft: null, dueLabel: null, urgencyPct: 0 };
+  }
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const due = new Date(dueDateStr);
+  due.setHours(0, 0, 0, 0);
+  const daysLeft = Math.round((due - now) / (1000 * 60 * 60 * 24));
+  const dueLabel = due.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // urgencyPct: 100 = overdue/today, decreasing as deadline is further away (capped at 30 days out = 0%)
+  const urgencyPct = daysLeft <= 0
+    ? 100
+    : Math.max(0, Math.round(((30 - Math.min(daysLeft, 30)) / 30) * 100));
+  return { daysLeft, dueLabel, urgencyPct };
+}
+
+// Pick a lucide icon based on status/priority
+function taskIcon(task) {
+  if (task.status === "done") return CheckCircle;
+  if (task.status === "cancelled") return XCircle;
+  if (task.priority === "urgent") return AlertTriangle;
+  if (task.priority === "high") return Star;
+  if (task.status === "in_progress") return GitBranch;
+  if (task.priority === "medium") return Clock;
+  return Circle;
+}
+
+// Convert status to orbital timeline status
+function mapStatus(status) {
+  if (status === "done") return "completed";
+  if (status === "in_progress") return "in-progress";
+  return "pending";
+}
+
+// Convert tasks array → RadialOrbitalTimeline data (max 10 nodes for clarity)
+function tasksToTimeline(tasks) {
+  const slice = tasks.slice(0, 10);
+  return slice.map((task) => {
+    const { daysLeft, dueLabel, urgencyPct } = deadlineFields(task.due_date, task.status);
+    return {
+      id: task.id,
+      title: task.title.length > 18 ? task.title.slice(0, 16) + "…" : task.title,
+      date: dueLabel ?? task.status.replace("_", " "),
+      content: task.description || "No description provided.",
+      category: task.category_detail?.name ?? "General",
+      icon: taskIcon(task),
+      relatedIds: slice
+        .filter((t) => t.id !== task.id && t.category_detail?.name === task.category_detail?.name && t.category_detail)
+        .map((t) => t.id)
+        .slice(0, 3),
+      status: mapStatus(task.status),
+      // deadline fields (replaces energy)
+      daysLeft,
+      dueLabel,
+      urgencyPct,
+      // keep energy as a dummy so nothing breaks
+      energy: urgencyPct,
+    };
+  });
+}
+
 export default function Dashboard() {
   const { fetchProfile } = useAuthStore();
   const { fetchTasks, fetchStats, fetchCategories, tasks, stats, isLoading, totalCount, filters } =
     useTaskStore();
 
+  const [view, setView] = useState("list"); // "list" | "orbital"
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -85,6 +155,29 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Orbital full-screen view */}
+        {view === "orbital" && (
+          <div className="fixed inset-0 z-40 bg-black" style={{ top: "64px" }}>
+            <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+              <span className="text-white/50 text-xs">Click a node to expand · Click background to reset</span>
+              <button
+                onClick={() => setView("list")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
+              >
+                <LayoutGrid size={13} /> List View
+              </button>
+            </div>
+            {tasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-white/40 gap-3">
+                <Circle size={48} />
+                <p className="text-sm">No tasks yet — create one in List View</p>
+              </div>
+            ) : (
+              <RadialOrbitalTimeline timelineData={tasksToTimeline(tasks)} />
+            )}
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Main content */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -94,12 +187,37 @@ export default function Dashboard() {
                 Tasks{" "}
                 <span className="text-sm font-normal text-gray-400">({totalCount})</span>
               </h2>
-              <button onClick={openCreate} className="btn-primary">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                New Task
-              </button>
+              <div className="flex items-center gap-2">
+                {/* View toggle */}
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+                  <button
+                    onClick={() => setView("list")}
+                    className={`px-3 py-1.5 flex items-center gap-1 transition-colors ${
+                      view === "list"
+                        ? "bg-primary-600 text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <LayoutGrid size={13} /> List
+                  </button>
+                  <button
+                    onClick={() => setView("orbital")}
+                    className={`px-3 py-1.5 flex items-center gap-1 transition-colors ${
+                      view === "orbital"
+                        ? "bg-primary-600 text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <Circle size={13} /> Orbital
+                  </button>
+                </div>
+                <button onClick={openCreate} className="btn-primary">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New Task
+                </button>
+              </div>
             </div>
 
             {/* Filters */}
@@ -209,6 +327,8 @@ export default function Dashboard() {
       </main>
 
       {modalOpen && <TaskModal task={editingTask} onClose={closeModal} />}
+
+      <Footer dark />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { categoryApi, taskApi } from "../services/api";
+import { categoryApi, taskApi } from "../services/index";
 
 const useTaskStore = create((set, get) => ({
   tasks: [],

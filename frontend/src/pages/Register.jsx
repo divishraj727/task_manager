@@ -1,6 +1,7 @@
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import Footer from "../components/Footer";
 import useAuthStore from "../stores/authStore";
 
 export default function Register() {
@@ -31,8 +32,8 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex flex-col bg-gray-50 px-4 py-10">
+      <div className="w-full max-w-md mx-auto flex-1 flex flex-col justify-center">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center mx-auto mb-3">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -120,6 +121,8 @@ export default function Register() {
           </p>
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 }
